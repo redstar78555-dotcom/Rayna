@@ -1,0 +1,167 @@
+[index.html.html](https://github.com/user-attachments/files/24366386/index.html.html)
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>象棋起卦助手</title>
+    <style>
+        body { font-family: "PingFang TC", "Microsoft JhengHei", sans-serif; background: #fdfaf5; padding: 20px; display: flex; justify-content: center; }
+        .container { background: #fff; width: 100%; max-width: 500px; padding: 30px; border-radius: 20px; box-shadow: 0 10px 25px rgba(0,0,0,0.08); border: 1px solid #eee; }
+        h1 { text-align: center; color: #8b0000; margin-bottom: 30px; letter-spacing: 2px; }
+        
+        /* 輸入區順序由上而下 */
+        .input-stack { display: flex; flex-direction: column; gap: 15px; margin-bottom: 25px; }
+        .input-field { display: flex; flex-direction: column; }
+        label { font-size: 15px; font-weight: bold; color: #444; margin-bottom: 6px; }
+        input { padding: 12px; border: 2px solid #eee; border-radius: 10px; font-size: 18px; transition: 0.3s; text-align: center; }
+        input:focus { border-color: #8b0000; outline: none; background: #fff9f9; }
+        
+        button { width: 100%; padding: 15px; background: #8b0000; color: white; border: none; border-radius: 10px; font-size: 18px; cursor: pointer; font-weight: bold; }
+        button:hover { background: #5d0000; transform: translateY(-1px); }
+
+        #resultArea { margin-top: 40px; display: none; }
+        
+        /* 結果排序：變、互、本 */
+        .gua-display-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+        .gua-column { text-align: center; display: flex; flex-direction: column; align-items: center; }
+        .label-text { font-weight: bold; font-size: 16px; margin-bottom: 10px; color: #333; }
+        .gua-name { font-size: 16px; color: #8b0000; font-weight: bold; margin-bottom: 15px; min-height: 40px; display: flex; align-items: center; }
+
+        /* 畫卦 */
+        .lines-container { display: flex; flex-direction: column-reverse; gap: 6px; background: #fff; padding: 10px; border-radius: 5px; }
+        .line-wrapper { display: flex; align-items: center; gap: 8px; }
+        .line-num { font-size: 10px; color: #999; width: 12px; }
+        
+        /* 陽爻：實線 */
+        .line-yang { width: 80px; height: 10px; background-color: #333; border-radius: 2px; }
+        /* 陰爻：兩段實線 */
+        .line-yin { width: 80px; height: 10px; display: flex; justify-content: space-between; }
+        .line-yin::before, .line-yin::after { content: ""; width: 36px; height: 10px; background-color: #333; border-radius: 2px; }
+        
+        /* 動爻變色 */
+        .is-moving .line-yang, .is-moving .line-yin::before, .is-moving .line-yin::after { background-color: #e74c3c !important; }
+        .change-mark { color: #e74c3c; font-size: 12px; margin-top: 5px; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>象棋起卦助手</h1>
+    
+    <div class="input-stack">
+        <div class="input-field">
+            <label>1. 下卦(橫)</label>
+            <input type="number" id="downInput" placeholder="請輸入數字">
+        </div>
+        <div class="input-field">
+            <label>2. 上卦(直)</label>
+            <input type="number" id="upInput" placeholder="請輸入數字">
+        </div>
+        <div class="input-field">
+            <label>3. 動爻(圓)</label>
+            <input type="number" id="changeInput" placeholder="請輸入數字">
+        </div>
+    </div>
+
+    <button onclick="calculate()">執行計算</button>
+
+    <div id="resultArea">
+        <div class="gua-display-grid">
+            <div class="gua-column">
+                <div class="label-text">【變卦】</div>
+                <div id="nameTrans" class="gua-name"></div>
+                <div id="linesTrans" class="lines-container"></div>
+            </div>
+            <div class="gua-column">
+                <div class="label-text">【互卦】</div>
+                <div id="nameInter" class="gua-name"></div>
+                <div id="linesInter" class="lines-container"></div>
+            </div>
+            <div class="gua-column">
+                <div class="label-text">【本卦】</div>
+                <div id="nameMain" class="gua-name"></div>
+                <div id="linesMain" class="lines-container"></div>
+                <div id="moveMsg" class="change-mark"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    const sixtyFourGuas = {
+        1: { 1:"乾為天", 0:"地天泰", 2:"澤天夬", 3:"火天大有", 4:"雷天大壯", 5:"風天小畜", 6:"水天需", 7:"山天大畜" },
+        0: { 1:"天地否", 0:"坤為地", 2:"澤地萃", 3:"火地晉", 4:"雷地豫", 5:"風地觀", 6:"水地比", 7:"山地剝" },
+        2: { 1:"天澤履", 0:"地澤臨", 2:"兌為澤", 3:"火澤睽", 4:"雷澤歸妹", 5:"風澤中孚", 6:"水澤節", 7:"山澤損" },
+        3: { 1:"天火同人", 0:"地火明夷", 2:"澤火革", 3:"離為火", 4:"雷火豐", 5:"風火家人", 6:"水火既濟", 7:"山火賁" },
+        4: { 1:"天雷無妄", 0:"地雷復", 2:"澤雷隨", 3:"火雷噬嗑", 4:"震為雷", 5:"風雷益", 6:"水雷屯", 7:"山雷頤" },
+        5: { 1:"天風姤", 0:"地風升", 2:"澤風大過", 3:"火風鼎", 4:"雷風恆", 5:"巽為風", 6:"水風井", 7:"山風蠱" },
+        6: { 1:"天水訟", 0:"地水師", 2:"澤水困", 3:"火水未濟", 4:"雷水解", 5:"風水渙", 6:"坎為水", 7:"山水蒙" },
+        7: { 1:"天山遁", 0:"地山謙", 2:"澤山咸", 3:"火山旅", 4:"雷山小過", 5:"風山漸", 6:"水山蹇", 7:"艮為山" }
+    };
+
+    const baGuaData = {
+        1: [1, 1, 1], 2: [0, 1, 1], 3: [1, 0, 1], 4: [0, 0, 1],
+        5: [1, 1, 0], 6: [0, 1, 0], 7: [1, 0, 0], 0: [0, 0, 0]
+    };
+
+    function drawGuaLines(containerId, lines, movingIdx = -1) {
+        const container = document.getElementById(containerId);
+        container.innerHTML = "";
+        lines.forEach((type, index) => {
+            const wrapper = document.createElement('div');
+            wrapper.className = "line-wrapper";
+            if (index === movingIdx) wrapper.classList.add("is-moving");
+            
+            const line = document.createElement('div');
+            line.className = type === 1 ? "line-yang" : "line-yin";
+            
+            wrapper.appendChild(line);
+            container.appendChild(wrapper);
+        });
+    }
+
+    function getIndex(threeLines) {
+        for (let k in baGuaData) {
+            if (baGuaData[k].every((v, i) => v === threeLines[i])) return parseInt(k);
+        }
+        return 0;
+    }
+
+    function calculate() {
+        const dNum = parseInt(document.getElementById('downInput').value);
+        const uNum = parseInt(document.getElementById('upInput').value);
+        const cNum = parseInt(document.getElementById('changeInput').value);
+
+        if (isNaN(dNum) || isNaN(uNum) || isNaN(cNum)) return alert("請填入完整數字");
+
+        const uIdx = uNum % 8;
+        const dIdx = dNum % 8;
+        let cIdx = cNum % 6; if (cIdx === 0) cIdx = 6;
+
+        // 本卦
+        const mainLines = [...baGuaData[dIdx], ...baGuaData[uIdx]];
+        document.getElementById('nameMain').innerText = sixtyFourGuas[uIdx][dIdx];
+        drawGuaLines('linesMain', mainLines, cIdx - 1);
+        document.getElementById('moveMsg').innerText = "第 " + cIdx + " 爻動";
+
+        // 互卦 (234爻下, 345爻上)
+        const iD = [mainLines[1], mainLines[2], mainLines[3]];
+        const iU = [mainLines[2], mainLines[3], mainLines[4]];
+        document.getElementById('nameInter').innerText = sixtyFourGuas[getIndex(iU)][getIndex(iD)];
+        drawGuaLines('linesInter', [...iD, ...iU]);
+
+        // 變卦
+        const transLines = [...mainLines];
+        transLines[cIdx-1] = transLines[cIdx-1] === 1 ? 0 : 1;
+        const tD = [transLines[0], transLines[1], transLines[2]];
+        const tU = [transLines[3], transLines[4], transLines[5]];
+        document.getElementById('nameTrans').innerText = sixtyFourGuas[getIndex(tU)][getIndex(tD)];
+        drawGuaLines('linesTrans', transLines, cIdx - 1);
+
+        document.getElementById('resultArea').style.display = 'block';
+    }
+</script>
+
+</body>
+</html>
